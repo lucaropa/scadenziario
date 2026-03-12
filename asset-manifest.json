@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/scadenziario/static/css/main.9b0cf8f4.css",
+    "main.js": "/scadenziario/static/js/main.cfc0c9fe.js",
+    "index.html": "/scadenziario/index.html",
+    "main.9b0cf8f4.css.map": "/scadenziario/static/css/main.9b0cf8f4.css.map",
+    "main.cfc0c9fe.js.map": "/scadenziario/static/js/main.cfc0c9fe.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.9b0cf8f4.css",
+    "static/js/main.cfc0c9fe.js"
+  ]
+}
