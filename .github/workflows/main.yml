@@ -12,24 +12,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
       - name: Install dependencies
-        run: cd frontend && npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps
 
-      - name: Build
-        run: cd frontend && npm run build
+      - name: Build project
+        run: npm run build
         env:
           CI: false
 
-      - name: Deploy
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./frontend/build
+          publish_dir: ./build
