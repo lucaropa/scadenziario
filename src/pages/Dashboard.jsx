@@ -8,7 +8,8 @@ import {
   ArrowRight,
   TrendingUp,
   AlertCircle,
-  Plus
+  Plus,
+  ClipboardList
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,11 +19,12 @@ import {
   getExpiringItems, 
   getOverdueItems,
   getCategoryColor,
-  getStatusColor,
-  getStatusLabel,
-  getCategoryLabel
+  getCategoryLabel,
+  getAutoStatusColor,
+  getAutoStatusLabel,
+  getFacilityStatistics
 } from "@/lib/storage";
-import { format, isToday, isThisWeek, differenceInDays } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
@@ -69,7 +71,9 @@ const UrgentItem = ({ item }) => {
           <Badge variant="outline" className={`${getCategoryColor(item.categoria)} text-[10px]`}>
             {getCategoryLabel(item.categoria)}
           </Badge>
-          <span className="text-xs text-zinc-500">{item.responsabile}</span>
+          <Badge variant="outline" className={`${getAutoStatusColor(item.scadenza)} text-[10px]`}>
+            {getAutoStatusLabel(item.scadenza)}
+          </Badge>
         </div>
       </div>
       <div className="text-right ml-4">
@@ -87,12 +91,14 @@ const UrgentItem = ({ item }) => {
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
+  const [facilityStats, setFacilityStats] = useState(null);
   const [urgentItems, setUrgentItems] = useState([]);
   const [overdueItems, setOverdueItems] = useState([]);
 
   useEffect(() => {
     const loadData = () => {
       setStats(getStatistics());
+      setFacilityStats(getFacilityStatistics());
       setUrgentItems(getExpiringItems(30));
       setOverdueItems(getOverdueItems());
     };
@@ -108,14 +114,13 @@ const Dashboard = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  if (!stats) return null;
+  if (!stats || !facilityStats) return null;
 
-  // Chart data
+  // Chart data for maintenance
   const chartData = [
     { name: 'Conforme', value: stats.conforme, color: '#10b981' },
-    { name: 'Non Conforme', value: stats.nonConforme, color: '#ef4444' },
-    { name: 'In Predisposizione', value: stats.inPredisposizione, color: '#f59e0b' },
-    { name: 'Ritardo', value: stats.ritardo, color: '#f97316' },
+    { name: 'Prossima Scadenza', value: stats.prossimaScadenza, color: '#f59e0b' },
+    { name: 'In Ritardo', value: stats.ritardo, color: '#ef4444' },
   ].filter(d => d.value > 0);
 
   const conformityRate = stats.total > 0 
@@ -128,47 +133,95 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 font-['Manrope']">Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-1">Panoramica dello scadenziario manutenzioni</p>
+          <p className="text-sm text-zinc-500 mt-1">Panoramica scadenziario e facility management</p>
         </div>
-        <Link to="/nuova">
-          <Button data-testid="new-maintenance-btn">
-            <Plus className="w-4 h-4 mr-2" />
-            Nuova Manutenzione
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/nuova">
+            <Button data-testid="new-maintenance-btn">
+              <Plus className="w-4 h-4 mr-2" />
+              Nuova Scadenza
+            </Button>
+          </Link>
+          <Link to="/facility/nuova">
+            <Button variant="outline" data-testid="new-facility-btn">
+              <ClipboardList className="w-4 h-4 mr-2" />
+              Nuova Attività
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Totale Attività" 
-          value={stats.total} 
-          icon={Calendar}
-          color="bg-zinc-100 text-zinc-700"
-          delay={1}
-        />
-        <StatCard 
-          title="Conformi" 
-          value={stats.conforme} 
-          icon={CheckCircle2}
-          trend={`${conformityRate}% conformità`}
-          color="bg-emerald-100 text-emerald-700"
-          delay={2}
-        />
-        <StatCard 
-          title="Scadenze Settimana" 
-          value={stats.scaduteSettimana} 
-          icon={Clock}
-          color="bg-amber-100 text-amber-700"
-          delay={3}
-        />
-        <StatCard 
-          title="Scadute" 
-          value={stats.scadute} 
-          icon={AlertTriangle}
-          color="bg-red-100 text-red-700"
-          delay={4}
-        />
+      {/* Maintenance Stats Grid */}
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Scadenziario Manutenzioni</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard 
+            title="Totale Attività" 
+            value={stats.total} 
+            icon={Calendar}
+            color="bg-zinc-100 text-zinc-700"
+            delay={1}
+          />
+          <StatCard 
+            title="Conformi" 
+            value={stats.conforme} 
+            icon={CheckCircle2}
+            trend={`${conformityRate}% conformità`}
+            color="bg-emerald-100 text-emerald-700"
+            delay={2}
+          />
+          <StatCard 
+            title="Prossima Scadenza" 
+            value={stats.prossimaScadenza} 
+            icon={Clock}
+            color="bg-amber-100 text-amber-700"
+            delay={3}
+          />
+          <StatCard 
+            title="In Ritardo" 
+            value={stats.ritardo} 
+            icon={AlertTriangle}
+            color="bg-red-100 text-red-700"
+            delay={4}
+          />
+        </div>
+      </div>
+
+      {/* Facility Stats Grid */}
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Facility Management</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <Card className="bg-blue-500 text-white">
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold font-['Manrope']">{facilityStats.aperto}</p>
+              <p className="text-xs text-blue-100 uppercase tracking-wider mt-1">Aperte</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-amber-500 text-white">
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold font-['Manrope']">{facilityStats.inCorso}</p>
+              <p className="text-xs text-amber-100 uppercase tracking-wider mt-1">In Corso</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-purple-500 text-white">
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold font-['Manrope']">{facilityStats.inAttesa}</p>
+              <p className="text-xs text-purple-100 uppercase tracking-wider mt-1">In Attesa</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-emerald-500 text-white">
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold font-['Manrope']">{facilityStats.completato}</p>
+              <p className="text-xs text-emerald-100 uppercase tracking-wider mt-1">Completate</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-red-500 text-white">
+            <CardContent className="p-4 text-center">
+              <p className="text-2xl font-bold font-['Manrope']">{facilityStats.urgenti}</p>
+              <p className="text-xs text-red-100 uppercase tracking-wider mt-1">Urgenti</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Main Content Grid */}
@@ -191,7 +244,7 @@ const Dashboard = () => {
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm font-medium text-red-800 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" />
-                  {overdueItems.length} attività scadute richiedono attenzione immediata
+                  {overdueItems.length} attività in ritardo richiedono attenzione immediata
                 </p>
               </div>
             )}
@@ -212,7 +265,7 @@ const Dashboard = () => {
         <Card className="animate-fade-in opacity-0 stagger-5" data-testid="compliance-chart-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg font-semibold font-['Manrope']">
-              Stato Conformità
+              Stato Scadenze
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -252,34 +305,6 @@ const Dashboard = () => {
               <p className="text-3xl font-bold text-zinc-900 font-['Manrope']">{conformityRate}%</p>
               <p className="text-xs text-zinc-500 uppercase tracking-wider">Tasso di conformità</p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-zinc-900 text-white">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold font-['Manrope']">{stats.scaduteOggi}</p>
-            <p className="text-xs text-zinc-400 uppercase tracking-wider mt-1">Scadenze Oggi</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-amber-500 text-white">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold font-['Manrope']">{stats.scaduteSettimana}</p>
-            <p className="text-xs text-amber-100 uppercase tracking-wider mt-1">Questa Settimana</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-blue-500 text-white">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold font-['Manrope']">{stats.scaduteMese}</p>
-            <p className="text-xs text-blue-100 uppercase tracking-wider mt-1">Questo Mese</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-emerald-500 text-white">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold font-['Manrope']">{stats.conforme}</p>
-            <p className="text-xs text-emerald-100 uppercase tracking-wider mt-1">Conformi</p>
           </CardContent>
         </Card>
       </div>

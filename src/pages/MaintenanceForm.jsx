@@ -18,13 +18,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { 
   getMaintenanceById, 
   addMaintenanceItem, 
   updateMaintenanceItem,
   CATEGORIES,
-  STATUSES,
-  PERIODICITIES
+  PERIODICITIES,
+  getAutoStatusColor,
+  getAutoStatusLabel
 } from "@/lib/storage";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -32,7 +34,8 @@ import {
   ArrowLeft, 
   Save, 
   Calendar as CalendarIcon,
-  Loader2
+  Loader2,
+  Info
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,7 +52,6 @@ const MaintenanceForm = () => {
     legge: "",
     periodicita: "",
     scadenza: new Date(),
-    stato: "IP",
     responsabile: "",
     note: ""
   });
@@ -134,7 +136,7 @@ const MaintenanceForm = () => {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 font-['Manrope']">
-            {isEditing ? "Modifica Manutenzione" : "Nuova Manutenzione"}
+            {isEditing ? "Modifica Scadenza" : "Nuova Scadenza"}
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
             {isEditing ? "Modifica i dati della manutenzione" : "Inserisci i dati della nuova manutenzione"}
@@ -196,43 +198,40 @@ const MaintenanceForm = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Categoria *</Label>
-                  <Select 
-                    value={formData.categoria} 
-                    onValueChange={(value) => handleChange('categoria', value)}
-                  >
-                    <SelectTrigger data-testid="select-categoria">
-                      <SelectValue placeholder="Seleziona categoria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map(cat => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Stato *</Label>
-                  <Select 
-                    value={formData.stato} 
-                    onValueChange={(value) => handleChange('stato', value)}
-                  >
-                    <SelectTrigger data-testid="select-stato">
-                      <SelectValue placeholder="Seleziona stato" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUSES.map(st => (
-                        <SelectItem key={st.value} value={st.value}>
-                          {st.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-2">
+                <Label>Categoria *</Label>
+                <Select 
+                  value={formData.categoria} 
+                  onValueChange={(value) => handleChange('categoria', value)}
+                >
+                  <SelectTrigger data-testid="select-categoria">
+                    <SelectValue placeholder="Seleziona categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Auto Status Info */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Info className="w-4 h-4 text-blue-600 mt-0.5" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">Stato automatico</p>
+                    <p className="text-blue-600 text-xs mt-1">
+                      Lo stato viene calcolato automaticamente in base alla scadenza:
+                    </p>
+                    <ul className="text-xs mt-2 space-y-1 text-blue-600">
+                      <li>• <span className="font-medium text-emerald-700">Conforme</span> - oltre 3 settimane dalla scadenza</li>
+                      <li>• <span className="font-medium text-amber-700">Prossima Scadenza</span> - entro 3 settimane</li>
+                      <li>• <span className="font-medium text-red-700">In Ritardo</span> - data scaduta</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -297,6 +296,14 @@ const MaintenanceForm = () => {
                 </div>
               </div>
 
+              {/* Preview stato automatico */}
+              <div className="flex items-center gap-2 pt-2">
+                <span className="text-sm text-zinc-500">Stato attuale:</span>
+                <Badge variant="outline" className={getAutoStatusColor(formData.scadenza.toISOString())}>
+                  {getAutoStatusLabel(formData.scadenza.toISOString())}
+                </Badge>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="responsabile">Responsabile/Incaricato *</Label>
                 <Input
@@ -348,7 +355,7 @@ const MaintenanceForm = () => {
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />
-                  {isEditing ? "Salva Modifiche" : "Crea Manutenzione"}
+                  {isEditing ? "Salva Modifiche" : "Crea Scadenza"}
                 </>
               )}
             </Button>

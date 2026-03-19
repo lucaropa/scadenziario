@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,15 +30,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   getMaintenanceItems, 
   deleteMaintenanceItem,
   getCategoryColor,
-  getStatusColor,
   getCategoryLabel,
-  getStatusLabel,
+  getAutoStatusColor,
+  getAutoStatusLabel,
+  calculateAutoStatus,
   CATEGORIES,
-  STATUSES
+  AUTO_STATUSES,
+  exportToCSV,
+  exportMaintenanceToExcel,
+  exportMaintenanceToPDF,
+  importMaintenanceFromExcel
 } from "@/lib/storage";
 import { format, differenceInDays } from "date-fns";
 import { it } from "date-fns/locale";
@@ -51,7 +64,12 @@ import {
   X,
   ArrowUpDown,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  FileText,
+  MoreVertical
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,6 +79,7 @@ const MaintenanceList = () => {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortConfig, setSortConfig] = useState({ key: 'scadenza', direction: 'asc' });
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     loadItems();
@@ -89,10 +108,41 @@ const MaintenanceList = () => {
     setStatusFilter("all");
   };
 
+  const handleExportExcel = async () => {
+    try {
+      await exportMaintenanceToExcel();
+      toast.success("Export Excel completato");
+    } catch (err) {
+      toast.error("Errore export Excel");
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      await exportMaintenanceToPDF();
+      toast.success("Export PDF completato");
+    } catch (err) {
+      toast.error("Errore export PDF");
+    }
+  };
+
+  const handleImportExcel = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    try {
+      const result = await importMaintenanceFromExcel(file);
+      toast.success(result.message);
+      loadItems();
+    } catch (err) {
+      toast.error(err.message || "Errore importazione Excel");
+    }
+    event.target.value = '';
+  };
+
   const filteredAndSortedItems = useMemo(() => {
     let result = [...items];
 
-    // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(item => 
@@ -103,17 +153,14 @@ const MaintenanceList = () => {
       );
     }
 
-    // Filter by category
     if (categoryFilter !== "all") {
       result = result.filter(item => item.categoria === categoryFilter);
     }
 
-    // Filter by status
     if (statusFilter !== "all") {
-      result = result.filter(item => item.stato === statusFilter);
+      result = result.filter(item => calculateAutoStatus(item.scadenza) === statusFilter);
     }
 
-    // Sort
     result.sort((a, b) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
@@ -121,9 +168,12 @@ const MaintenanceList = () => {
       if (sortConfig.key === 'scadenza') {
         aVal = new Date(aVal).getTime();
         bVal = new Date(bVal).getTime();
+      } else if (sortConfig.key === 'stato') {
+        aVal = calculateAutoStatus(a.scadenza);
+        bVal = calculateAutoStatus(b.scadenza);
       } else if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
+        aVal = aVal?.toLowerCase() || '';
+        bVal = bVal?.toLowerCase() || '';
       }
 
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -145,27 +195,73 @@ const MaintenanceList = () => {
 
   return (
     <div className="space-y-6" data-testid="maintenance-list-page">
+      {/* Hidden file input for Excel import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImportExcel}
+        accept=".xlsx,.xls"
+        className="hidden"
+      />
+
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 font-['Manrope']">Elenco Manutenzioni</h1>
+          <h1 className="text-2xl font-bold text-zinc-900 font-['Manrope']">Scadenziario Manutenzioni</h1>
           <p className="text-sm text-zinc-500 mt-1">
             {filteredAndSortedItems.length} di {items.length} elementi
           </p>
         </div>
-        <Link to="/nuova">
-          <Button data-testid="new-maintenance-btn">
-            <Plus className="w-4 h-4 mr-2" />
-            Nuova Manutenzione
+        <div className="flex gap-2 flex-wrap">
+          {/* Export Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" data-testid="export-dropdown-btn">
+                <Download className="w-4 h-4 mr-2" />
+                Esporta
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Formato export</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportExcel} data-testid="export-excel-btn">
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { exportToCSV(); toast.success("Export CSV completato"); }} data-testid="export-csv-btn">
+                <FileText className="w-4 h-4 mr-2 text-blue-600" />
+                CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPDF} data-testid="export-pdf-btn">
+                <FileText className="w-4 h-4 mr-2 text-red-600" />
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Import Button */}
+          <Button 
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="import-excel-btn"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importa Excel
           </Button>
-        </Link>
+
+          <Link to="/nuova">
+            <Button data-testid="new-maintenance-btn">
+              <Plus className="w-4 h-4 mr-2" />
+              Nuova Scadenza
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
       <Card data-testid="filters-card">
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <Input
@@ -177,7 +273,6 @@ const MaintenanceList = () => {
               />
             </div>
 
-            {/* Category Filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-full sm:w-[180px]" data-testid="category-filter">
                 <Filter className="w-4 h-4 mr-2 text-zinc-400" />
@@ -191,7 +286,6 @@ const MaintenanceList = () => {
               </SelectContent>
             </Select>
 
-            {/* Status Filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-[180px]" data-testid="status-filter">
                 <Filter className="w-4 h-4 mr-2 text-zinc-400" />
@@ -199,13 +293,12 @@ const MaintenanceList = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tutti gli stati</SelectItem>
-                {STATUSES.map(st => (
+                {AUTO_STATUSES.map(st => (
                   <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            {/* Clear Filters */}
             {hasActiveFilters && (
               <Button variant="ghost" onClick={clearFilters} className="text-zinc-500" data-testid="clear-filters-btn">
                 <X className="w-4 h-4 mr-1" />
@@ -215,6 +308,22 @@ const MaintenanceList = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-emerald-500" />
+          <span className="text-zinc-600">Conforme (oltre 3 settimane)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-amber-500" />
+          <span className="text-zinc-600">Prossima Scadenza (entro 3 settimane)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <span className="text-zinc-600">In Ritardo (scaduto)</span>
+        </div>
+      </div>
 
       {/* Data Table */}
       <Card data-testid="data-table-card">
@@ -296,12 +405,13 @@ const MaintenanceList = () => {
                   filteredAndSortedItems.map((item) => {
                     const scadenza = new Date(item.scadenza);
                     const daysUntil = differenceInDays(scadenza, new Date());
-                    const isOverdue = daysUntil < 0 && item.stato !== 'C' && item.stato !== 'NA';
+                    const autoStatus = calculateAutoStatus(item.scadenza);
+                    const isOverdue = autoStatus === 'ritardo';
 
                     return (
                       <TableRow 
                         key={item.id} 
-                        className={`hover:bg-zinc-50 ${isOverdue ? 'bg-red-50/50' : ''}`}
+                        className={`hover:bg-zinc-50 ${isOverdue ? 'bg-red-50/50' : autoStatus === 'prossima_scadenza' ? 'bg-amber-50/30' : ''}`}
                         data-testid={`row-${item.id}`}
                       >
                         <TableCell className="font-medium max-w-[250px]">
@@ -322,7 +432,7 @@ const MaintenanceList = () => {
                             <p className={`text-sm ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
                               {format(scadenza, 'dd/MM/yyyy')}
                             </p>
-                            <p className={`text-xs ${isOverdue ? 'text-red-500' : 'text-zinc-500'}`}>
+                            <p className={`text-xs ${isOverdue ? 'text-red-500' : autoStatus === 'prossima_scadenza' ? 'text-amber-600' : 'text-zinc-500'}`}>
                               {isOverdue 
                                 ? `Scaduto da ${Math.abs(daysUntil)} gg`
                                 : daysUntil === 0 
@@ -333,8 +443,8 @@ const MaintenanceList = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={getStatusColor(item.stato)}>
-                            {getStatusLabel(item.stato)}
+                          <Badge variant="outline" className={getAutoStatusColor(item.scadenza)}>
+                            {getAutoStatusLabel(item.scadenza)}
                           </Badge>
                         </TableCell>
                         <TableCell className="max-w-[150px]">

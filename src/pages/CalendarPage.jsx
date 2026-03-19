@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { 
   getMaintenanceItems, 
   getCategoryColor, 
-  getStatusColor,
   getCategoryLabel,
-  getStatusLabel
+  getAutoStatusColor,
+  getAutoStatusLabel,
+  calculateAutoStatus
 } from "@/lib/storage";
-import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, isToday } from "date-fns";
+import { format, isSameDay, isToday } from "date-fns";
 import { it } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Eye, Calendar as CalendarIcon } from "lucide-react";
 
@@ -56,7 +57,11 @@ const CalendarPage = () => {
     hasUrgent: (date) => {
       const dateStr = format(date, 'yyyy-MM-dd');
       const events = eventDates[dateStr];
-      return events && events.some(e => e.stato === 'NC' || e.stato === 'RA');
+      if (!events) return false;
+      return events.some(e => {
+        const status = calculateAutoStatus(e.scadenza);
+        return status === 'ritardo' || status === 'prossima_scadenza';
+      });
     }
   };
 
@@ -148,19 +153,27 @@ const CalendarPage = () => {
                 DayContent: ({ date }) => {
                   const dateStr = format(date, 'yyyy-MM-dd');
                   const dayEvents = eventDates[dateStr] || [];
-                  const hasUrgent = dayEvents.some(e => e.stato === 'NC' || e.stato === 'RA');
+                  const hasRitardo = dayEvents.some(e => calculateAutoStatus(e.scadenza) === 'ritardo');
+                  const hasProssima = dayEvents.some(e => calculateAutoStatus(e.scadenza) === 'prossima_scadenza');
                   
                   return (
                     <div className="relative w-full h-full flex flex-col items-center justify-center">
                       <span>{date.getDate()}</span>
                       {dayEvents.length > 0 && (
                         <div className="flex gap-0.5 mt-0.5">
-                          {dayEvents.slice(0, 3).map((_, i) => (
-                            <div 
-                              key={i} 
-                              className={`w-1.5 h-1.5 rounded-full ${hasUrgent ? 'bg-red-500' : 'bg-emerald-500'}`}
-                            />
-                          ))}
+                          {dayEvents.slice(0, 3).map((e, i) => {
+                            const status = calculateAutoStatus(e.scadenza);
+                            return (
+                              <div 
+                                key={i} 
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  status === 'ritardo' ? 'bg-red-500' : 
+                                  status === 'prossima_scadenza' ? 'bg-amber-500' : 
+                                  'bg-emerald-500'
+                                }`}
+                              />
+                            );
+                          })}
                           {dayEvents.length > 3 && (
                             <span className="text-[8px] text-zinc-500">+{dayEvents.length - 3}</span>
                           )}
@@ -179,8 +192,12 @@ const CalendarPage = () => {
                 <span className="text-xs text-zinc-500">Conforme</span>
               </div>
               <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                <span className="text-xs text-zinc-500">Prossima Scadenza</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-xs text-zinc-500">Urgente/Non Conforme</span>
+                <span className="text-xs text-zinc-500">In Ritardo</span>
               </div>
             </div>
           </CardContent>
@@ -217,8 +234,8 @@ const CalendarPage = () => {
                           <Badge variant="outline" className={`${getCategoryColor(item.categoria)} text-[10px]`}>
                             {getCategoryLabel(item.categoria)}
                           </Badge>
-                          <Badge variant="outline" className={`${getStatusColor(item.stato)} text-[10px]`}>
-                            {getStatusLabel(item.stato)}
+                          <Badge variant="outline" className={`${getAutoStatusColor(item.scadenza)} text-[10px]`}>
+                            {getAutoStatusLabel(item.scadenza)}
                           </Badge>
                         </div>
                         <p className="text-xs text-zinc-500 mt-2">{item.responsabile}</p>
